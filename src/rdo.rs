@@ -65,7 +65,7 @@ fn cdef_dist_wxh_8x8(src1: &PlaneSlice, src2: &PlaneSlice, q0: f64) -> u64 {
   let svar = (sum_s2 - ((sum_s as i64 * sum_s as i64 + 32) >> 6)) as f64;
   let dvar = (sum_d2 - ((sum_d as i64 * sum_d as i64 + 32) >> 6)) as f64;
   let sse = (sum_d2 + sum_s2 - 2 * sum_sd) as f64;
-  let ssim_boost = 0.5_f64 * (svar + dvar + 12.0_f64*q0) / f64::sqrt(18.0_f64*q0*q0 + svar * dvar);
+  let ssim_boost = 0.4_f64 * (svar + dvar + 12.0_f64*q0) / f64::sqrt(18.0_f64*q0*q0 + svar * dvar);
   (sse * ssim_boost + 0.5_f64) as u64
 }
 
@@ -101,7 +101,6 @@ fn compute_rd_cost(
   // Convert q into Q0 precision, given that libaom quantizers are Q3
   let q0 = q / 8.0_f64;
 
-  println!("q = {}\n", q0);
   // Lambda formula from doc/theoretical_results.lyx in the daala repo
   // Use Q0 quantizer since lambda will be applied to Q0 pixel domain
   let lambda = q0 * q0 * std::f64::consts::LN_2 / 6.0;
