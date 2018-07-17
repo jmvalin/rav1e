@@ -44,7 +44,7 @@ pub struct RDOPartitionOutput {
 }
 
 // Sum of Squared Error for a wxh block
-fn cdef_dist_wxh_8x8(src1: &PlaneSlice, src2: &PlaneSlice) -> u64 {
+fn cdef_dist_wxh_8x8(src1: &PlaneSlice, src2: &PlaneSlice, q0: f64) -> u64 {
   let coeff_shift = 0;
   let mut sum_s: i32 = 0;
   let mut sum_d: i32 = 0;
@@ -65,15 +65,15 @@ fn cdef_dist_wxh_8x8(src1: &PlaneSlice, src2: &PlaneSlice) -> u64 {
   let svar = (sum_s2 - ((sum_s as i64 * sum_s as i64 + 32) >> 6)) as f64;
   let dvar = (sum_d2 - ((sum_d as i64 * sum_d as i64 + 32) >> 6)) as f64;
   let sse = (sum_d2 + sum_s2 - 2 * sum_sd) as f64;
-  let ssim_boost = 0.5_f64 * (svar + dvar + (400 << 2 * coeff_shift) as f64) / f64::sqrt((20000 << 4 * coeff_shift) as f64 + svar * dvar);
+  let ssim_boost = 0.5_f64 * (svar + dvar + 12.0_f64*q0) / f64::sqrt(18.0_f64*q0*q0 + svar * dvar);
   (sse * ssim_boost + 0.5_f64) as u64
 }
 
-fn cdef_dist_wxh(src1: &PlaneSlice, src2: &PlaneSlice, w: usize, h: usize) -> u64 {
+fn cdef_dist_wxh(src1: &PlaneSlice, src2: &PlaneSlice, w: usize, h: usize, q0: f64) -> u64 {
   let mut sum: u64 = 0;
   for j in 0..h/8 {
     for i in 0..w/8 {
-      sum += cdef_dist_wxh_8x8(&src1.subslice(i*8, j*8), &src2.subslice(i*8, j*8))
+      sum += cdef_dist_wxh_8x8(&src1.subslice(i*8, j*8), &src2.subslice(i*8, j*8), q0)
     }
   }
   sum
@@ -101,6 +101,7 @@ fn compute_rd_cost(
   // Convert q into Q0 precision, given that libaom quantizers are Q3
   let q0 = q / 8.0_f64;
 
+  println!("q = {}\n", q0);
   // Lambda formula from doc/theoretical_results.lyx in the daala repo
   // Use Q0 quantizer since lambda will be applied to Q0 pixel domain
   let lambda = q0 * q0 * std::f64::consts::LN_2 / 6.0;
@@ -111,7 +112,8 @@ fn compute_rd_cost(
     &fs.input.planes[0].slice(&po),
     &fs.rec.planes[0].slice(&po),
     w_y,
-    h_y
+    h_y,
+    q0
   );
 
   // Add chroma distortion only when it is available
@@ -123,7 +125,7 @@ fn compute_rd_cost(
         y: sb_offset.y + partition_start_y
       };
 
-      distortion += cdef_dist_wxh(
+      distortion += sse_wxh(
         &fs.input.planes[p].slice(&po),
         &fs.rec.planes[p].slice(&po),
         w_uv,
